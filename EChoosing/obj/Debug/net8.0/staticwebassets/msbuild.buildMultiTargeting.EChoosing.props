@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\EChoosing.props" />
+</Project>

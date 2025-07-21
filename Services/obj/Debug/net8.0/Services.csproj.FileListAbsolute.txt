@@ -1,0 +1,15 @@
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\bin\Debug\net8.0\Services.deps.json
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\bin\Debug\net8.0\Services.dll
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\bin\Debug\net8.0\Services.pdb
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\bin\Debug\net8.0\BusinessObjects.dll
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\bin\Debug\net8.0\BusinessObjects.pdb
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.csproj.AssemblyReference.cache
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.GeneratedMSBuildEditorConfig.editorconfig
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.AssemblyInfoInputs.cache
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.AssemblyInfo.cs
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.csproj.CoreCompileInputs.cache
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.csproj.Up2Date
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.dll
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\refint\Services.dll
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\Services.pdb
+F:\Ky_VIII\PRN232\Project\EChoosing\Services\obj\Debug\net8.0\ref\Services.dll
