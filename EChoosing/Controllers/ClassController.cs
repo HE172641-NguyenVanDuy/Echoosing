@@ -1,4 +1,5 @@
 ﻿using BusinessObjects.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Services;
@@ -25,6 +26,8 @@ namespace EChoosing.Controllers
             _codeJoinClassService = codeJoinClassService;
             _examService = examService;
         }
+
+        [Authorize(Policy = "TeacherOnly")]
         [HttpPost("create")]
         public IActionResult CreateClass([FromBody] CreateClassRequest request)
         {
@@ -112,6 +115,7 @@ namespace EChoosing.Controllers
             });
         }
 
+        [Authorize(Policy = "TeacherOnly")]
         // DELETE: api/class-management/{classId}/students/{studentId}
         [HttpDelete("{classId}/students/{studentId}")]
         public IActionResult RemoveStudentFromClass(string classId, string studentId)
@@ -123,6 +127,7 @@ namespace EChoosing.Controllers
             return Ok(new { message = "Student removed successfully", classID });
         }
 
+        [Authorize(Policy = "TeacherOnly")]
         // PUT: api/class-management/{classId}/rename
         [HttpPut("{classId}/rename")]
         public IActionResult RenameClass(string classId, [FromBody] RenameClassRequest request)
@@ -134,6 +139,7 @@ namespace EChoosing.Controllers
             return Ok(new { message = "Class renamed successfully", classID });
         }
 
+        [Authorize(Policy = "TeacherOnly")]
         // DELETE: api/class-management/{classId}
         [HttpDelete("delete/{classId}")]
         public IActionResult DeleteClass(string classId)

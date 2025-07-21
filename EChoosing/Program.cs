@@ -86,9 +86,9 @@ builder.Services
         ValidateIssuer = false,
         ValidateAudience = false,
         ValidateLifetime = false,
-        ValidIssuer = configuration["JWT:Issuer"],
-        ValidAudience = configuration["JWT:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JWT:SecretKey"]))
+        ValidIssuer = configuration["JwtSettings:Issuer"],
+        ValidAudience = configuration["JwtSettings:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]))
     };
 });
 

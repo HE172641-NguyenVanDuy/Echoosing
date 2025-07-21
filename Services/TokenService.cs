@@ -27,6 +27,7 @@ namespace Services
             var claims = new[]
             {
             new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Email, user.Email),
             new Claim("UserID", user.UserId.ToString()),
             new Claim("Role", user.Role.ToString() )
             //new Claim(ClaimTypes.Role, GetRoleName(user.Role) )

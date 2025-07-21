@@ -5,10 +5,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using MimeKit;
 using Services;
 using Services.OTP;
 using Services.ViewModels;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 namespace EChoosing.Controllers
 {
@@ -48,18 +52,44 @@ namespace EChoosing.Controllers
 
             // Tùy vào cách bạn xử lý hash
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == request.Username);
+                .FirstOrDefaultAsync(u => u.Email == request.Username);
 
             if (user == null || !_passwordService.VerifyPassword(request.Password, user.PasswordHash))
             {
                 return Unauthorized(new { message = "Invalid username or password." });
             }
 
-            var token = _tokenService.GenerateToken(user);
+            IConfiguration configuration = new ConfigurationBuilder()
+                    .SetBasePath(Directory.GetCurrentDirectory())
+                    .AddJsonFile("appsettings.json", true, true).Build();
+
+            var claims = new List<Claim>
+                {
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim("UserID", user.UserId.ToString()),
+            new Claim("Role", user.Role.ToString() )
+                };
+
+            var symetricKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]));
+            var signCredential = new SigningCredentials(symetricKey, SecurityAlgorithms.HmacSha256);
+
+            var preparedToken = new JwtSecurityToken(
+                issuer: configuration["JwtSettings:Issuer"],
+                audience: configuration["JwtSettings:Audience"],
+                claims: claims,
+                expires: DateTime.Now.AddMinutes(16),
+                signingCredentials: signCredential);
+
+            var generatedToken = new JwtSecurityTokenHandler().WriteToken(preparedToken);
+            var role = user.Role;
+            var accountId = user.UserId.ToString();
+
+            //var token = _tokenService.GenerateToken(user);
 
             return Ok(new
             {
-                access_token = token,
+                access_token = generatedToken,
                 token_type = "Bearer",
                 expires_in = 3600, 
                 username = user.Username,
