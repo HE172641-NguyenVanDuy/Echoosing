@@ -11,6 +11,19 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+try
+{
+    var context = new CustomAssemblyLoadContext();
+    context.LoadUnmanagedLibrary(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/lib/libwkhtmltox.dll"));
+}
+catch (Exception ex)
+{
+    // Ghi log lỗi
+    Console.WriteLine($"Error loading libwkhtmltox.dll: {ex.Message}");
+    throw;
+}
+
 // Add services to the container.
 
 builder.Services.AddDbContext<EchoosingContext>(options =>
