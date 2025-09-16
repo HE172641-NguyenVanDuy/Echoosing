@@ -13,8 +13,11 @@ namespace Services
         string CreateExam(Exam exam);
         string GetExamByID(int ExamID, out Exam exam);
         string GetListExamByID(string userID, out List<Exam> exams);
-        string GetListExamByClassID(string classID, out List<Exam> exams);
-        string UpdateExam(Exam exam);
+        //string GetListExamByClassExamID(string classID, out List<Exam> exams);
+
+		string GetListExamByClassExamID(string classID, out List<ClassExam> exams);
+
+		string UpdateExam(Exam exam);
         string DeleteExamByID(int examID);
         string GetListStatusExam(out List<Systemkey> listStatusExam);
         string GetExamNameById(int examId);
@@ -104,29 +107,32 @@ namespace Services
             }
         }
 
-        public string GetListExamByClassID(string classID, out List<Exam> exams)
-        {
-            exams = new List<Exam>();
-            try
-            {
-                var listExam = _context.ClassExams.Where(u => u.ClassId == classID).Include(c => c.Exam).ToList();
-                if (listExam.Any())
-                {
-                    foreach (var item in listExam)
-                    {
-                        exams.Add(item.Exam);
-                    }
-                }
-                else throw new Exception("Class has no test");
-                return "";
-            }
-            catch (Exception ex)
-            {
-                return ex.Message;
-            }
-        }
 
-        public string GetListExamByID(string userID, out List<Exam> exams)
+		public string GetListExamByClassExamID(string classID, out List<ClassExam> classExams)
+		{
+			classExams = new List<ClassExam>();
+			try
+			{
+				classExams = _context.ClassExams
+					.Where(ce => ce.ClassId == classID && ce.IsDelete != true)
+					.Include(ce => ce.Exam)
+					.ToList();
+
+				if (!classExams.Any())
+					throw new Exception("Class has no exams.");
+
+				return "";
+			}
+			catch (Exception ex)
+			{
+				return ex.Message;
+			}
+		}
+
+
+
+
+		public string GetListExamByID(string userID, out List<Exam> exams)
         {
             exams = null;
             try

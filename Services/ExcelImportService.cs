@@ -7,7 +7,7 @@ namespace Services
 {
     public interface IExcelImportService
     {
-        Task ProcessExcelFileAsync(IFormFile excelFile, string examName, int duration, DateTime timeStart, string uId);
+		Task<int> ProcessExcelFileAsync(IFormFile excelFile, string examName, int duration, DateTime timeStart, string uId);
     }
 
     public class ExcelImportService : IExcelImportService
@@ -20,7 +20,7 @@ namespace Services
             _codeJoinClassService = codeJoinClassService;
         }
 
-        public async Task ProcessExcelFileAsync(IFormFile excelFile, string examName, int duration, DateTime timeStart, string uId)
+        public async Task<int> ProcessExcelFileAsync(IFormFile excelFile, string examName, int duration, DateTime timeStart, string uId)
         {
             if (excelFile == null || excelFile.Length == 0)
                 throw new ArgumentException("Invalid Excel file.");
@@ -148,7 +148,8 @@ namespace Services
 
                     _context.ExamQuestions.AddRange(examQuestionsToAdd);
                     await _context.SaveChangesAsync();
-                }
+					return exam.ExamId; // ✅ trả về
+				}
             }
         }
     }

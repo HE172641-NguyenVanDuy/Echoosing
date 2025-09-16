@@ -1,10 +1,14 @@
 ﻿using BusinessObjects.Models;
 using DinkToPdf.Contracts;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Services;
 using Services.ViewModels;
+using System.Data;
 using System.Security.Claims;
+using static EChoosing.Controllers.ExamController;
 
 namespace EChoosing.Controllers
 {
@@ -18,8 +22,9 @@ namespace EChoosing.Controllers
         private readonly IClassService _classService;
         private readonly IConverter _converter;
         private readonly IExportPDFservice _exporter;
+        private readonly EchoosingContext _context;
 
-        public TestController(ITestService testService, IExamService examService, IAccountService accountService, IClassService classService, IConverter converter, IExportPDFservice _exporter)
+        public TestController(EchoosingContext _context, ITestService testService, IExamService examService, IAccountService accountService, IClassService classService, IConverter converter, IExportPDFservice _exporter)
         {
             _testService = testService;
             _examService = examService;
@@ -27,27 +32,67 @@ namespace EChoosing.Controllers
             _classService = classService;
             _converter = converter;
             _exporter = _exporter;
+            this._context = _context;
         }
+
 
         [HttpGet("by-class/{classID}")]
         public IActionResult GetExamsByClass(string classID)
         {
             string role = _accountService.GetUserRoleLogin(HttpContext);
 
-            string msg = _examService.GetListExamByClassID(classID, out List<Exam> exams);
+            string msg = _examService.GetListExamByClassExamID(classID, out List<ClassExam> classExams);
             if (!string.IsNullOrEmpty(msg))
             {
                 return BadRequest(new { error = msg });
             }
 
+            // Map dữ liệu
+            var result = classExams.Select(ce => new ExamResponseByClassDto
+            {
+                ClassExamId = ce.ClassExamId,
+                ClassId = ce.ClassId,
+                ExamId = ce.ExamId,
+                ExamName = ce.Exam?.ExamName,
+                TimeStart = ce.Exam?.TimeStart,
+                Duration = ce.Exam?.Duration
+            }).ToList();
+
             return Ok(new
             {
                 Role = role,
                 ClassID = classID,
-                Exams = exams
+                Exams = result
             });
         }
+        [HttpGet("GetExamCode/{examID}")]
+        public IActionResult GetCodeExam(int examID)
+        {
+            var msg = _context.Exams.FirstOrDefault(a => a.ExamId == examID);
+            var msga = _context.ExamCodes.FirstOrDefault(a => a.ExamId == examID);
+            if (msg != null)
+            {
+                return Ok(new
+                {
+                    examName = msg.ExamName,
+                    timeStart = msg.TimeStart,
+                    examCode = msga.Code
+                });
+            }
+            return null;
+        }
 
+        [HttpGet("validate/{examcode}")]
+        public IActionResult ValidateExamCode(string examcode)
+        {
+            string msg = "";
+            var code = _context.ExamCodes.Where(a => a.Code.Equals(examcode));
+            if (!code.Any())
+            {
+                return BadRequest(msg);
+            }
+            return Ok();
+        }
         // GET: api/test/do?examId=1&classId=abc123&username=duy&examCode=XYZ
         [HttpGet("do")]
         public IActionResult LoadExam([FromQuery] int examId, [FromQuery] string classId,
@@ -104,6 +149,8 @@ namespace EChoosing.Controllers
         }
 
         // GET: /api/test-result/{attemptId}
+        // EChoosing\Controllers\TestController.cs
+
         [HttpGet("{attemptId}")]
         public IActionResult GetTestResult(string attemptId)
         {
@@ -111,49 +158,83 @@ namespace EChoosing.Controllers
 
             if (!string.IsNullOrEmpty(userId))
             {
-                string msg = _testService.GetResultTest(attemptId, out ResultTestVM result);
-                if (result != null)
-                    return Ok(result);
-            }
-            else
-            {
-                string msg = _testService.GetResultTestGuest(attemptId, out ExamAttempt result);
-                if (result != null)
-                    return Ok(result);
-            }
+                string msg = _testService.GetResultTest(attemptId, out ResultTestVMa result);
 
-            return NotFound("Không tìm thấy kết quả làm bài.");
-        }
-
-        // POST: /api/test-result/{attemptId}/export
-        [HttpPost("{attemptId}/export")]
-        public IActionResult ExportPdfResult(string attemptId)
-        {
-            string userId = _accountService.GetUserIDLogin(HttpContext);
-
-            if (!string.IsNullOrEmpty(userId))
-            {
-                string msg = _testService.GetResultTest(attemptId, out ResultTestVM result);
-                if (result != null)
+                if (result != null) // Check if the main 'result' object is null
                 {
-                    _exporter.ExportPDF(result, out byte[] file);
-                    return File(file, "application/pdf", "ResultExam.pdf");
+                    // --- Crucial Null Checks for User Case ---
+                    if (result.exam == null)
+                    {
+                        // Log this for debugging purposes
+                        Console.WriteLine($"WARNING: result.exam is null for attemptId: {attemptId}, userId: {userId}");
+                        return BadRequest("Exam data is missing in the test result (result.exam is null).");
+                    }
+                    if (result.examAttempt == null)
+                    {
+                        Console.WriteLine($"WARNING: result.examAttempt is null for attemptId: {attemptId}, userId: {userId}");
+                        return BadRequest("Exam Attempt data is missing in the test result (result.examAttempt is null).");
+                    }
+                    if (result.examAttempt.Exam == null) // This is the most common place for the NRE
+                    {
+                        Console.WriteLine($"WARNING: result.examAttempt.Exam is null for attemptId: {attemptId}, userId: {userId}");
+                        return BadRequest("Exam data within Exam Attempt is missing (result.examAttempt.Exam is null).");
+                    }
+                    // --- End of Crucial Null Checks ---
+
+                    var resultDto = new ResultTestDto
+                    {
+                        NumberCorrect = result.numberCorrect,
+                        NumberQuestion = result.numberQuestion,
+                        OptionResult = result.optionResult, // Ensure OptionResult and its contents are not null
+
+                        Exam = new ExamDtoa
+                        {
+                            Id = result.exam.ExamId,
+                            Name = result.exam.ExamName
+                        },
+
+                        ExamAttempt = new ExamAttemptDtoa
+                        {
+                            // Ensure result.examAttempt.AttemptId is not null or empty before parsing
+                            AttemptId = result.examAttempt.AttemptId, // <--- DIRECT ASSIGNMENT (no int.Parse)
+                                                                      // Use "0" as fallback for safety
+                            Exam = new ExamDtoa
+                            {
+                                Id = result.examAttempt.Exam.ExamId,
+                                Name = result.examAttempt.Exam.ExamName
+                            }
+                        }
+                    };
+                    return Ok(resultDto);
+                }
+                else // result itself was null
+                {
+                    Console.WriteLine($"INFO: No ResultTestVM found for attemptId: {attemptId}, userId: {userId}");
+                    return NotFound($"Result for attempt {attemptId} not found for user {userId}.");
                 }
             }
+            return BadRequest();
+            }
+        }
+        public class SubmitExamRequest
+        {
+            public int ExamID { get; set; }
+            public string? ClassID { get; set; }
+            public int Status { get; set; }
+            public string? Code { get; set; }
+            public string? Username { get; set; }
+            public DateTime TimeStart { get; set; }
+            public List<UserAnswerModel> UserAnswers { get; set; } = new();
+        }
 
-            return Unauthorized("Khách không được phép xuất file PDF.");
+        public class ExamResponseByClassDto
+        {
+            public string ClassExamId { get; set; } = null!;
+            public string? ClassId { get; set; }
+            public int? ExamId { get; set; }
+            public string? ExamName { get; set; }
+            public DateTime? TimeStart { get; set; }
+            public int? Duration { get; set; }
         }
 
     }
-
-    public class SubmitExamRequest
-    {
-        public int ExamID { get; set; }
-        public string? ClassID { get; set; }
-        public int Status { get; set; }
-        public string? Code { get; set; }
-        public string? Username { get; set; }
-        public DateTime TimeStart { get; set; }
-        public List<UserAnswerModel> UserAnswers { get; set; } = new();
-    }
-}

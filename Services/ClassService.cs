@@ -35,31 +35,77 @@ namespace Services
             _context = context;
             _codeJoinClassService = codeJoinClassService;
         }
-        public string CreateClass(string className, string userID, out string ClassID)
-        {
-            string classID = Guid.NewGuid().ToString();
-            ClassID = classID;
-            try
-            {
-                _context.Classes.Add(new Class
-                {
-                    ClassId = classID,
-                    ClassName = className,
-                    CreateDate = DateTime.Now,
-                    CreateBy = userID,
-                    IsDelete = false,
-                    CodeJoinClass = _codeJoinClassService.Encode(classID)
-                });
-                _context.SaveChanges();
-            }
-            catch (Exception ex)
-            {
-                return ex.Message;
-            }
-            return "";
-        }
+		//public string CreateClass(string className, string userID, out string ClassID)
+		//{
+		//    string classID = Guid.NewGuid().ToString();
+		//    ClassID = classID;
+		//    try
+		//    {
+		//        _context.Classes.Add(new Class
+		//        {
+		//            ClassId = classID,
+		//            ClassName = className,
+		//            CreateDate = DateTime.Now,
+		//            CreateBy = userID,
+		//            IsDelete = false,
+		//            CodeJoinClass = _codeJoinClassService.Encode(classID)
+		//        });
+		//        _context.SaveChanges();
+		//    }
+		//    catch (Exception ex)
+		//    {
+		//        return ex.Message;
+		//    }
+		//    return "";
+		//}
 
-        public string GetClass(string classID, out Class classInfo)
+		public string CreateClass(string className, string userID, out string ClassID)
+		{
+			string classID = Guid.NewGuid().ToString();
+			ClassID = classID;
+			try
+			{
+				using (var transaction = _context.Database.BeginTransaction())
+				{
+					// Tạo bản ghi mới cho Classes
+					var newClass = new Class
+					{
+						ClassId = classID,
+						ClassName = className,
+						CreateDate = DateTime.Now,
+						CreateBy = userID,
+						IsDelete = false,
+						CodeJoinClass = _codeJoinClassService.Encode(classID)
+					};
+					_context.Classes.Add(newClass);
+
+					// Tạo bản ghi mới cho ClassUser (liên kết người tạo với lớp)
+					var newClassUser = new ClassUser
+					{
+						ClassUserId = Guid.NewGuid().ToString(), // Tạo ID mới cho ClassUser
+						ClassId = classID,
+						UserId = userID,
+						CreateDate = DateTime.Now,
+						IsDelete = false // Giả định IsDelete mặc định là false
+					};
+					_context.ClassUsers.Add(newClassUser);
+
+					// Lưu tất cả thay đổi
+					_context.SaveChanges();
+					transaction.Commit();
+
+					// Cập nhật navigation property (tùy chọn, để đảm bảo quan hệ)
+					newClass.ClassUsers.Add(newClassUser);
+				}
+			}
+			catch (Exception ex)
+			{
+				return ex.Message;
+			}
+			return "";
+		}
+
+		public string GetClass(string classID, out Class classInfo)
         {
             classInfo = new Class();
             try

@@ -21,7 +21,8 @@ namespace Services.ViewModels
 
     }
 
-    public class RegisterUserDto
+
+	public class RegisterUserDto
     {
         public string Username { get; set; }
         public string Password { get; set; }
@@ -30,13 +31,7 @@ namespace Services.ViewModels
         public int Role { get; set; }
     }
 
-    public class JwtSettings
-    {
-        public string SecretKey { get; set; }
-        public string Issuer { get; set; }
-        public string Audience { get; set; }
-        public int ExpiryMinutes { get; set; }
-    }
+
 
     public class ChangePasswordRequest
     {

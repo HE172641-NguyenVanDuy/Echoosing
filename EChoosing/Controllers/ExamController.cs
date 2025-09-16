@@ -2,6 +2,7 @@
 using DinkToPdf;
 using DinkToPdf.Contracts;
 using EChoosing.ViewModels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Services;
@@ -45,41 +46,55 @@ namespace EChoosing.Controllers
             echoosingContext = exchosingContext;
         }
 
-        // GET: api/exams
-        [HttpGet("get-exams")]
-        public IActionResult GetExams(
-            [FromQuery] string? searchTerm,
-            [FromQuery] string? sortColumn,
-            [FromQuery] string? sortOrder)
-        {
-            string userId = _accountService.GetUserIDLogin(HttpContext);
-            if (string.IsNullOrEmpty(userId))
-                return Unauthorized(new { message = "Please login again." });
+		// GET: api/exams
+		[Authorize(Policy = "TeacherOnly")]
+		[HttpGet("get-exams")]
+		public IActionResult GetExams(
+	[FromQuery] string? searchTerm,
+	[FromQuery] string? sortColumn,
+	[FromQuery] string? sortOrder)
+		{
+			string userId = _accountService.GetUserIDLogin(HttpContext);
+			if (string.IsNullOrEmpty(userId))
+				return Unauthorized(new { message = "Please login again." });
 
-            string msg = _examService.GetListExamByID(userId, out List<Exam> exams);
-            if (!string.IsNullOrEmpty(msg) || exams == null)
-                return BadRequest(new { message = "Get Exam List Error", detail = msg });
+			string msg = _examService.GetListExamByID(userId, out List<Exam> exams);
+			if (!string.IsNullOrEmpty(msg) || exams == null)
+				return BadRequest(new { message = "Get Exam List Error", detail = msg });
 
-            // Filtering
-            if (!string.IsNullOrWhiteSpace(searchTerm))
-            {
-                exams = exams.Where(e =>
-                    e.ExamName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
-            }
+			// Filtering
+			if (!string.IsNullOrWhiteSpace(searchTerm))
+			{
+				exams = exams.Where(e =>
+					e.ExamName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+			}
 
-            // Sorting
-            if (!string.IsNullOrEmpty(sortColumn))
-            {
-                exams = sortOrder == "asc"
-                    ? exams.OrderBy(e => GetSortValue(e, sortColumn)).ToList()
-                    : exams.OrderByDescending(e => GetSortValue(e, sortColumn)).ToList();
-            }
+			// Sorting
+			if (!string.IsNullOrEmpty(sortColumn))
+			{
+				exams = sortOrder == "asc"
+					? exams.OrderBy(e => GetSortValue(e, sortColumn)).ToList()
+					: exams.OrderByDescending(e => GetSortValue(e, sortColumn)).ToList();
+			}
 
-            return Ok(exams);
-        }
+			// Chuyển sang DTO
+			var examDtos = exams.Select(e => new ExamDto
+			{
+				ExamId = e.ExamId,
+				ExamName = e.ExamName,
+				Duration = e.Duration,
+				TimeStart = e.TimeStart ?? DateTime.MinValue,
 
-        // POST: api/exams/upload
-        [HttpPost("upload")]
+				TotalQuestions = e.TotalQuestions,
+				CreatedDate = e.CreatedDate
+			}).ToList();
+
+			return Ok(examDtos);
+		}
+
+
+		// POST: api/exams/upload
+		[HttpPost("upload")]
         [RequestSizeLimit(10 * 1024 * 1024)] // Giới hạn file 10MB
         public async Task<IActionResult> UploadExam(
             [FromForm] IFormFile excelFile,
@@ -99,9 +114,9 @@ namespace EChoosing.Controllers
 
             try
             {
-                await _excelImportService.ProcessExcelFileAsync(excelFile, examName, duration, timeStart, userId);
-                return Ok(new { message = "Exam created successfully." });
-            }
+				var examId = await _excelImportService.ProcessExcelFileAsync(excelFile, examName, duration, timeStart, userId);
+				return Ok(new { message = "Exam created successfully.", examId = examId });
+			}
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "Error processing Excel file.", detail = ex.Message });
@@ -109,7 +124,8 @@ namespace EChoosing.Controllers
         }
 
         [HttpPost("CreateExamManual")]
-        public IActionResult CreateExam([FromBody] CreateExamManualRequest request)
+		[Authorize]
+		public IActionResult CreateExam([FromBody] CreateExamManualRequest request)
         {
             if (request == null)
                 return BadRequest(new { message = "Invalid request body." });
@@ -150,8 +166,8 @@ namespace EChoosing.Controllers
             return Ok(new
             {
                 message = "Exam created successfully.",
-                examId = exam.ExamId
-            });
+                examId = exam.ExamId.ToString()
+            }); 
         }
 
         [HttpGet("GetExamById/{id}")]
@@ -188,7 +204,8 @@ namespace EChoosing.Controllers
         }
 
         [HttpGet("EnterName")]
-        public IActionResult GetEnterName([FromQuery] int examId, [FromQuery] string examCode)
+		[Authorize]
+		public IActionResult GetEnterName([FromQuery] int examId, [FromQuery] string examCode)
         {
            
 
@@ -196,7 +213,8 @@ namespace EChoosing.Controllers
         }
 
         [HttpPost("TestEntry")]
-        public IActionResult Post([FromBody] TestEntryRequest request)
+		[Authorize]
+		public IActionResult Post([FromBody] TestEntryRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.UserName))
             {
@@ -213,7 +231,8 @@ namespace EChoosing.Controllers
         }
 
         [HttpPost("JoinExam")]
-        public IActionResult Post([FromBody] JoinExamRequest request)
+		[Authorize]
+		public IActionResult Post([FromBody] JoinExamRequest request)
         {
             var msg = _codeExamService.GetExamByCode(request.CodeExam, out ExamCodeVM examCodeVM);
 
@@ -266,6 +285,19 @@ namespace EChoosing.Controllers
             });
         }
 
+
+        [HttpGet("GetExamNameById/{examId}")]
+		[Authorize]
+		public IActionResult GetExamNameById(int examId)
+        {
+            var examName = _examService.GetExamNameById(examId);
+            if (!string.IsNullOrEmpty(examName))
+            {
+                return BadRequest(new { Message = examName });
+            }
+            return Ok(examName);
+        }
+
         [HttpPost("UpdateExam")]
         public IActionResult UpdateExam([FromBody] UpdateExamDto dto)
         {
@@ -292,6 +324,18 @@ namespace EChoosing.Controllers
             }
 
             return Ok(new { message = "Update Exam Successfully", examId = exam.ExamId });
+        }
+
+        [HttpGet("/GetListExamByUserId/{userid}")]
+        public IActionResult GetListExamByUserID(string userid)
+        {
+            string msg = _examService.GetListExamByID(userid, out List<Exam> exams);
+            if (!string.IsNullOrEmpty(msg))
+            {
+                return BadRequest(new { error = "Get Exam Error: " + msg });
+            }
+
+            return Ok(msg);
         }
 
         [HttpPost("export-result")]
@@ -411,7 +455,18 @@ namespace EChoosing.Controllers
                 _ => exam.CreatedDate,
             };
         }
-    }
+
+		public class ExamDto
+		{
+			public int ExamId { get; set; }
+			public string ExamName { get; set; } = string.Empty;
+			public int Duration { get; set; }
+			public DateTime TimeStart { get; set; }
+			public int TotalQuestions { get; set; }
+			public DateTime CreatedDate { get; set; }
+		}
+
+	}
 
 }
 

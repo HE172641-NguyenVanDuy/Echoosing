@@ -42,75 +42,49 @@ namespace EChoosing.Controllers
             return Ok(new { message = "Class created successfully", classID });
         }
 
-        [HttpGet("list")]
-        public IActionResult GetClassList()
-        {
-            string userRole = _accountService.GetUserRoleLogin(HttpContext);
-            string userId = _accountService.GetUserIDLogin(HttpContext);
-
-            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(userRole))
-            {
-                return Unauthorized(new { message = "Please login again." });
-            }
-
-            if (userRole != "5") // Student or others
-            {
-                var msg = _classService.GetClassForStudent(userId, out Dictionary<Class, List<ClassExam>> values);
-                if (!string.IsNullOrEmpty(msg))
-                {
-                    return BadRequest(new { message = msg });
-                }
-
-                // Convert Dictionary<Class, List<ClassExam>> to a DTO if necessary
-                var result = values.Select(kv => new
-                {
-                    Class = kv.Key,
-                    Exams = kv.Value
-                });
-
-                return Ok(new
-                {
-                    role = userRole,
-                    userId = userId,
-                    classExams = result
-                });
-            }
-            else // Role 5: creator/admin
-            {
-                var msg = _classService.GetListClassByCreateBy(userId, out List<Class> listClass);
-                if (!string.IsNullOrEmpty(msg))
-                {
-                    return BadRequest(new { message = msg });
-                }
-
-                return Ok(new
-                {
-                    role = userRole,
-                    userId = userId,
-                    classes = listClass
-                });
-            }
-        }
+        
         // GET: api/class-management/{classId}
         [HttpGet("get-class-info/{classId}")]
         public IActionResult GetClassInfo(string classId)
         {
             classId = classId?.Trim();
-            string msg = _classService.GetClass(classId, out Class classInfo);
+            if (string.IsNullOrEmpty(classId))
+            {
+                return BadRequest(new { message = "Class ID is required" });
+            }
 
+            string msg = _classService.GetClass(classId, out Class classInfo);
             if (!string.IsNullOrEmpty(msg))
+            {
                 return BadRequest(new { message = msg });
+            }
 
             msg = _classService.GetUserInClass(classInfo, out List<User> users);
             if (!string.IsNullOrEmpty(msg))
+            {
                 return BadRequest(new { message = msg });
+            }
 
             string role = _accountService.GetUserRoleLogin(HttpContext);
 
+            // Chuyển đổi sang DTO để tránh vòng tham chiếu
+            var classResponse = new ClassResponseDto
+            {
+                ClassId = classInfo.ClassId,
+                ClassName = classInfo.ClassName,
+                CodeJoinClass = classInfo.CodeJoinClass,
+                Users = users?.Select(u => new UserResponseDto
+                {
+                    UserId = u.UserId,
+                    UserName = u.Username, // Hoặc các thuộc tính khác của User
+                    ClassId = classInfo.ClassId // Chỉ lưu ClassId
+                }).ToList()
+            };
+
             return Ok(new
             {
-                classInfo,
-                users,
+                classInfo = classResponse,
+                users = classResponse.Users, // Trả về danh sách người dùng riêng nếu cần
                 userRole = role
             });
         }
@@ -193,6 +167,21 @@ namespace EChoosing.Controllers
             return Ok(new { message = "Joined class successfully." });
         }
 
+        [HttpGet("list-new")]
+        public async Task<IActionResult> GetClassListNew()
+        {
+            var classes = await _context.Classes
+                .Where(c => c.IsDelete != true) // Chỉ lấy lớp chưa bị xóa
+                .Select(c => new
+                {
+                    ClassId = c.ClassId,
+                    ClassName = c.ClassName
+                })
+                .ToListAsync();
+
+            return Ok(classes);
+        }
+
         [HttpGet("/statistic/{classId}")]
         public IActionResult GetStatisticsForClass(string classId)
         {
@@ -233,7 +222,123 @@ namespace EChoosing.Controllers
                 examStatusLookup = statusLookup
             });
         }
+
+        [HttpGet("list")]
+        [Authorize(Policy = "StudentOrTeacher")]
+        public IActionResult GetClassList()
+        {
+            string userRole = _accountService.GetUserRoleLogin(HttpContext);
+            string userId = _accountService.GetUserIDLogin(HttpContext);
+
+            Console.WriteLine("IsAuthenticated: " + HttpContext.User.Identity.IsAuthenticated);
+            Console.WriteLine("UserId: " + userId);
+            Console.WriteLine("UserRole: " + userRole);
+
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(userRole))
+            {
+                return Unauthorized(new { message = "Please login again." });
+            }
+
+            if (userRole != "4") // Not Student (e.g., Teacher or others)
+            {
+                var msg = _classService.GetClassForStudent(userId, out Dictionary<Class, List<ClassExam>> values);
+                if (!string.IsNullOrEmpty(msg))
+                {
+                    return BadRequest(new { message = msg });
+                }
+
+                // Convert to DTO
+                var result = values.Select(kv => new ClassListExamDto
+                {
+                    Class = new ClassDto
+                    {
+                        ClassId = kv.Key.ClassId,
+                        ClassName = kv.Key.ClassName,
+                        CreateDate = kv.Key.CreateDate,
+                        CreateBy = kv.Key.CreateBy,
+                        CodeJoinClass = kv.Key.CodeJoinClass
+                    },
+                    Exams = kv.Value.Select(exam => new ClassListExamResponseDto
+                    {
+                        ClassExamId = exam.ClassExamId,
+                        ClassId = exam.ClassId,
+                        ExamName = exam.Exam.ExamName,
+                        TimeStart = exam.Exam.TimeStart
+                    }).ToList()
+                });
+
+                return Ok(new
+                {
+                    role = userRole,
+                    userId = userId,
+                    classExams = result
+                });
+            }
+            else // Role 4: Student
+            {
+                var msg = _classService.GetListClassByCreateBy(userId, out List<Class> listClass);
+                if (!string.IsNullOrEmpty(msg))
+                {
+                    return BadRequest(new { message = msg });
+                }
+
+                Console.WriteLine("List class count: " + listClass.Count);
+                var result = listClass.Select(c => new ClassListDto
+                {
+                    ClassId = c.ClassId,
+                    ClassName = c.ClassName,
+                    CreateDate = c.CreateDate,
+                    CreateBy = c.CreateBy,
+                    CodeJoinClass = c.CodeJoinClass
+                });
+
+                return Ok(new
+                {
+                    role = userRole,
+                    userId = userId,
+                    classes = result
+                });
+            }
+        }
+
     }
+
+    public class ClassListDto
+    {
+        public string ClassId { get; set; }
+        public string ClassName { get; set; }
+        public DateTime? CreateDate { get; set; }
+        public string CreateBy { get; set; }
+        public string CodeJoinClass { get; set; }
+    }
+
+    public class ClassListExamResponseDto
+    {
+        public string ClassExamId { get; set; }
+        public string ClassId { get; set; } // Chỉ lưu ClassId, không lưu toàn bộ Class
+                                            // Các thuộc tính khác của ClassExam, ví dụ:
+        public string ExamName { get; set; }
+        public DateTime? TimeStart { get; set; }
+        //public DateTime EndDate { get; set; }
+    }
+
+    public class ClassListExamDto
+    {
+        public ClassDto Class { get; set; }
+        public List<ClassListExamResponseDto> Exams { get; set; }
+    }
+
+    public class ClassExamResponseDto
+    {
+        public string ClassExamId { get; set; }
+        public string ClassId { get; set; } // Chỉ lưu ClassId, không lưu toàn bộ Class
+                                            // Các thuộc tính khác của ClassExam, ví dụ:
+        public string ExamName { get; set; }
+        public DateTime? TimeStart { get; set; }
+        //public DateTime EndDate { get; set; }
+    }
+
+
 
     public class JoinClassDto
     {
@@ -242,6 +347,40 @@ namespace EChoosing.Controllers
         public string? ClassCode { get; set; } // Nếu cần xử lý mã lớp riêng
     }
 
+	public class ClassDto
+	{
+		public string ClassId { get; set; }
+
+		public string? ClassName { get; set; }
+
+		public DateTime? CreateDate { get; set; }
+
+		public string? CreateBy { get; set; }
+
+		public string? CodeJoinClass { get; set; }
+	}
+
+	public class ClassExamDto
+	{
+		public ClassDto Class { get; set; }
+
+		public List<ClassExam> Exams { get; set; } // Giữ nguyên ClassExam nếu bạn cần dữ liệu này
+	}
+
+    public class ClassResponseDto
+    {
+        public string ClassId { get; set; }
+        public string ClassName { get; set; }
+        public string CodeJoinClass { get; set; }
+        public List<UserResponseDto> Users { get; set; }
+    }
+
+    public class UserResponseDto
+    {
+        public string UserId { get; set; }
+        public string UserName { get; set; } // Hoặc các thuộc tính khác của User
+        public string ClassId { get; set; } // Chỉ lưu ClassId, không lưu toàn bộ Class
+    }
 
 }
 

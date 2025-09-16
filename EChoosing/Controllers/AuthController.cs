@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using MimeKit;
 using Services;
@@ -32,7 +33,14 @@ namespace EChoosing.Controllers
 
         private readonly ITempOtpStorage _otpStorage;
 
-        public AuthController(TokenService tokenService, IPasswordService passwordService, EchoosingContext context, IAccountService accountService, IConfiguration configuration, ITempOtpStorage otpStorage)
+        private readonly SendGmail _sendGmailService;
+        private readonly GetEmailTemplateServie _getEmailTemplateServie;
+
+		private readonly JwtSettings _jwtSettings;
+
+		public AuthController(TokenService tokenService, 
+            IPasswordService passwordService, EchoosingContext context, IAccountService accountService, 
+            IConfiguration configuration, ITempOtpStorage otpStorage, SendGmail _sendGmailService, GetEmailTemplateServie _getEmailTemplateServie, IOptions<JwtSettings> jwtSettingsOptions)
         {
             _tokenService = tokenService;
             _passwordService = passwordService;
@@ -40,61 +48,164 @@ namespace EChoosing.Controllers
             _accountService = accountService;
             _configuration = configuration;
             _otpStorage = otpStorage;
-        }
+            _sendGmailService = _sendGmailService;
+            _getEmailTemplateServie = _getEmailTemplateServie;
+			_jwtSettings = jwtSettingsOptions.Value;
+		}
 
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest request)
-        {
-            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-            {
-                return BadRequest(new { message = "Username and password are required." });
-            }
+		//[HttpPost("login")]
+		//public async Task<IActionResult> Login([FromBody] LoginRequest request)
+		//{
+		//    if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+		//    {
+		//        return BadRequest(new { message = "Username and password are required." });
+		//    }
 
-            // Tùy vào cách bạn xử lý hash
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email == request.Username);
+		//    // Tùy vào cách bạn xử lý hash
+		//    var user = await _context.Users
+		//        .FirstOrDefaultAsync(u => u.Username == request.Username);
 
-            if (user == null || !_passwordService.VerifyPassword(request.Password, user.PasswordHash))
-            {
-                return Unauthorized(new { message = "Invalid username or password." });
-            }
+		//    Console.WriteLine(user.ToString());
 
-            IConfiguration configuration = new ConfigurationBuilder()
-                    .SetBasePath(Directory.GetCurrentDirectory())
-                    .AddJsonFile("appsettings.json", true, true).Build();
+		//    if (user == null || !_passwordService.VerifyPassword(request.Password, user.PasswordHash))
+		//    {
+		//        return Unauthorized(new { message = "Invalid username or password." });
+		//    }
 
-            var claims = new List<Claim>
-                {
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim("UserID", user.UserId.ToString()),
-            new Claim("Role", user.Role.ToString() )
-                };
+		//    IConfiguration configuration = new ConfigurationBuilder()
+		//            .SetBasePath(Directory.GetCurrentDirectory())
+		//            .AddJsonFile("appsettings.json", true, true).Build();
 
-            var symetricKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]));
-            var signCredential = new SigningCredentials(symetricKey, SecurityAlgorithms.HmacSha256);
+		//    var claims = new List<Claim>
+		//        {
+		//    new Claim(ClaimTypes.Name, user.Username),
+		//    new Claim(ClaimTypes.Email, user.Email),
+		//    new Claim("UserID", user.UserId.ToString()),
+		//    new Claim("Role", user.Role.ToString() )
+		//        };
 
-            var preparedToken = new JwtSecurityToken(
-                issuer: configuration["JwtSettings:Issuer"],
-                audience: configuration["JwtSettings:Audience"],
-                claims: claims,
-                expires: DateTime.Now.AddMinutes(16),
-                signingCredentials: signCredential);
+		//    var symetricKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]));
+		//    var signCredential = new SigningCredentials(symetricKey, SecurityAlgorithms.HmacSha256);
 
-            var generatedToken = new JwtSecurityTokenHandler().WriteToken(preparedToken);
-            var role = user.Role;
-            var accountId = user.UserId.ToString();
+		//    var preparedToken = new JwtSecurityToken(
+		//        issuer: configuration["JwtSettings:Issuer"],
+		//        audience: configuration["JwtSettings:Audience"],
+		//        claims: claims,
+		//        expires: DateTime.Now.AddMinutes(16),
+		//        signingCredentials: signCredential);
 
-            //var token = _tokenService.GenerateToken(user);
+		//    var generatedToken = new JwtSecurityTokenHandler().WriteToken(preparedToken);
+		//    var role = user.Role;
+		//    var accountId = user.UserId.ToString();
+
+		//    //var token = _tokenService.GenerateToken(user);
+
+		//    return Ok(new
+		//    {
+		//        access_token = generatedToken,
+		//        token_type = "Bearer",
+		//        expires_in = 3600, 
+		//        username = user.Username,
+		//        role = user.Role
+		//    });
+		//}
+		//    [HttpPost("login")]
+		//    public async Task<IActionResult> Login([FromBody] LoginRequest request, IConfiguration configuration)
+		//    {
+		//        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+		//        {
+		//            return BadRequest(new { message = "Username and password are required." });
+		//        }
+
+		//        var user = await _context.Users
+		//            .FirstOrDefaultAsync(u => u.Username == request.Username);
+
+		//        if (user == null || !_passwordService.VerifyPassword(request.Password, user.PasswordHash))
+		//        {
+		//            return Unauthorized(new { message = "Invalid username or password." });
+		//        }
+
+		//        var claims = new List<Claim>
+		//{
+		//    new Claim(ClaimTypes.Name, user.Username),
+		//    new Claim(ClaimTypes.Email, user.Email),
+		//    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()), // Sử dụng ClaimTypes.NameIdentifier cho UserID
+		//    new Claim(ClaimTypes.Role, user.Role.ToString()) // Sử dụng ClaimTypes.Role cho role
+		//};
+
+		//        var symetricKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]));
+		//        var signCredential = new SigningCredentials(symetricKey, SecurityAlgorithms.HmacSha256);
+
+		//        var token = new JwtSecurityToken(
+		//            issuer: configuration["JwtSettings:Issuer"],
+		//            audience: configuration["JwtSettings:Audience"],
+		//            claims: claims,
+		//            expires: DateTime.Now.AddMinutes(60), // Đồng nhất với expires_in
+		//            signingCredentials: signCredential);
+
+		//        var generatedToken = new JwtSecurityTokenHandler().WriteToken(token);
+
+		//        return Ok(new
+		//        {
+		//            access_token = generatedToken,
+		//            token_type = "Bearer",
+		//            expires_in = 3600, // 1 giờ
+		//            username = user.Username,
+		//            role = user.Role
+		//        });
+		//    }
+
+		[HttpPost("login")]
+		public async Task<IActionResult> Login([FromBody] LoginRequest request)
+		{
+			if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+			{
+				return BadRequest(new { message = "Username and password are required." });
+			}
+
+			var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+
+			if (user == null || !_passwordService.VerifyPassword(request.Password, user.PasswordHash))
+			{
+				return Unauthorized(new { message = "Invalid username or password." });
+			}
+
+			// 🔐 Gọi token service để generate JWT
+			var token = _tokenService.GenerateToken(user);
+
+			// 🧁 Gán token vào Cookie HttpOnly
+			Response.Cookies.Append("JWToken", token, new CookieOptions
+			{
+				HttpOnly = true,
+				Secure = true, // Chỉ bật nếu dùng HTTPS
+				SameSite = SameSiteMode.Strict,
+				Expires = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes)
+			});
 
             return Ok(new
             {
-                access_token = generatedToken,
+                access_token = token,
                 token_type = "Bearer",
-                expires_in = 3600, 
+                expires_in = 3600, // 1 giờ
                 username = user.Username,
                 role = user.Role
             });
+        }
+
+
+        [HttpGet("user-list")]
+
+		public async Task<IActionResult> GetUserList()
+        {
+            var users = await _context.Users
+                .Select(u => new
+                {
+                    UserId = u.UserId,
+                    Username = u.Username
+                })
+                .ToListAsync();
+
+            return Ok(users);
         }
 
         [HttpPost("register")]
@@ -130,8 +241,10 @@ namespace EChoosing.Controllers
         }
 
         [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+		[Authorize]
+		public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
         {
+            
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
@@ -160,7 +273,9 @@ namespace EChoosing.Controllers
             return Ok(new { message = "Logout successful. Please remove token on client." });
         }
 
-        [HttpGet("profile")]
+
+		
+		[HttpGet("profile")]
         public IActionResult GetProfile()
         {
             string userId = _accountService.GetUserIDLogin(HttpContext); // Lấy từ JWT claims
@@ -174,9 +289,11 @@ namespace EChoosing.Controllers
             return Ok(user);
         }
 
+
         // PUT: api/profile/change-password
         [HttpPut("change-password")]
-        public IActionResult ChangePassword([FromBody] ChangePasswordRequest model)
+		[Authorize]
+		public IActionResult ChangePassword([FromBody] ChangePasswordRequest model)
         {
             if (model.NewPassword != model.ConfirmPassword)
                 return BadRequest(new { message = "Passwords do not match." });
@@ -267,8 +384,80 @@ namespace EChoosing.Controllers
                 client.Disconnect(true);
             }
         }
+
+        [HttpPost("forgot-password-email")]
+        public async Task<IActionResult> ForgotPasswordEmail([FromBody] ForgotPasswordEmailRequest request)
+        {
+            var user = _context.Users.FirstOrDefault(u => u.Email == request.Email);
+            if (user == null)
+            {
+                return BadRequest(new { message = "Tài khoản chưa tồn tại" });
+            }
+
+            string errorMsg = _getEmailTemplateServie.GetEmailTemplate("Echoosing.Resources.EmailOTP.html", out string htmlOTP);
+            if (errorMsg != null)
+            {
+                return StatusCode(500, new { message = errorMsg });
+            }
+
+            string otp = new Random().Next(100000, 999999).ToString();
+            htmlOTP = htmlOTP.Replace("@{OTP}@", otp);
+
+            string sendResult = await _sendGmailService.SendMail(new MailContent
+            {
+                To = user.Email,
+                Sub = "Email xác thực tài khoản.",
+                Body = htmlOTP
+            });
+
+            if (sendResult != null)
+            {
+                return StatusCode(500, new { message = sendResult });
+            }
+
+            user.Otp = otp;
+            user.OtpexpirationTime = DateTime.Now.AddMinutes(5);
+            _context.SaveChanges();
+
+            return Ok(new { message = "OTP đã được gửi", userId = user.UserId });
+        }
+
+
+
+        [HttpPost("verify-otp")]
+        public async Task<IActionResult> VerifyOtp([FromBody] ForgotPasswordOtpRequest request)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == request.UserID);
+
+            if (user == null)
+            {
+                return BadRequest("Tài khoản chưa tồn tại.");
+            }
+
+            if (user.Otp != request.OTP)
+            {
+                return BadRequest("Mã OTP không hợp lệ.");
+            }
+
+            if (user.OtpexpirationTime < DateTime.Now)
+            {
+                return BadRequest("Mã OTP đã hết hạn.");
+            }
+
+            // OK => Return user ID to redirect on FE
+            return Ok(new { userID = user.UserId });
+        }
+    }
+    public class ForgotPasswordOtpRequest
+    {
+        public string UserID { get; set; }
+        public string OTP { get; set; }
     }
 
+    public class ForgotPasswordEmailRequest
+    {
+        public string Email { get; set; }
+    }
 
 }
 

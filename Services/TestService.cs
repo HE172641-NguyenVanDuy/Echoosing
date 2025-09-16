@@ -14,7 +14,7 @@ namespace Services
         string LoadExamData(int examId, out int examDuration, out List<QuestionViewModel> questions);
         string SubmitExam(List<UserAnswerModel> userAnswers, string userId, int examId, int status, string code, string userName, string classId, out string attemptId, DateTime timeStart);
         List<Exam> GetAllExams();
-        public string GetResultTest(string attemptID, out ResultTestVM result);
+        public string GetResultTest(string attemptID, out ResultTestVMa result);
         public string GetResultTestGuest(string attemptID, out ExamAttempt result);
 
     }
@@ -189,25 +189,57 @@ namespace Services
             return _context.Exams.Where(e => e.IsDelete == false || e.IsDelete == null).ToList();
         }
 
-        public string GetResultTest(string attemptID, out ResultTestVM result)
+        public string GetResultTest(string attemptID, out ResultTestVMa result)
         {
-            result = new ResultTestVM();
+            result = new ResultTestVMa();
             result.numberCorrect = 0;
             try
             {
-                var attempt = _context.ExamAttempts.Include(a => a.Answers).Include(a => a.Exam).FirstOrDefault(a => a.AttemptId == attemptID);
+                var attempt = _context.ExamAttempts
+                                        .Include(a => a.Answers)
+                                        .Include(a => a.Exam) // Đã bao gồm Exam, nên attempt.Exam không null ở đây
+                                        .FirstOrDefault(a => a.AttemptId == attemptID);
+
+                if (attempt == null)
+                {
+                    // Logging thêm thông tin khi không tìm thấy attempt
+                    Console.WriteLine($"TestService: Attempt with ID {attemptID} not found.");
+                    return "Không tìm thấy Attempt!";
+                }
+
+                // --- ĐIỂM SỬA CHỮA CHÍNH ---
+                // Gán thuộc tính 'exam' của ResultTestVM từ attempt.Exam
+                if (attempt.Exam == null)
+                {
+                    // Đây là một kiểm tra an toàn, nhưng với .Include(a => a.Exam) nó hiếm khi xảy ra
+                    // trừ khi có vấn đề với dữ liệu hoặc cấu hình EF Core.
+                    Console.WriteLine($"TestService: WARNING: attempt.Exam is null for attempt ID {attemptID} even after Include.");
+                    return "Thông tin bài thi (Exam) bị thiếu.";
+                }
+
+                // GÁN THÔNG TIN BÀI THI VÀO result.exam
+                result.exam = new ExamVM // Sử dụng ExamVM của bạn, không phải entity Exam trực tiếp
+                {
+                    ExamId = attempt.Exam.ExamId, // Giả sử Exam.Id là ID của bài thi
+                    ExamName = attempt.Exam.ExamName // Giả sử Exam.Name là tên bài thi
+                };
+                // --- KẾT THÚC ĐIỂM SỬA CHỮA CHÍNH ---
+
+                // Gán attempt entity vào result.examAttempt
+                // Đảm bảo ResultTestVM.examAttempt có kiểu là ExamAttempt (entity)
+                // Nếu ResultTestVM.examAttempt là một ViewModel khác, bạn cần ánh xạ nó.
                 result.examAttempt = attempt;
-                if (attempt == null) return "Không tìm thấy Attempt!";
+
                 var questions = (from eq in _context.ExamQuestions
                                  join q in _context.Questions on eq.QuestionId equals q.QuestionId
                                  join o in _context.Options on q.QuestionId equals o.QuestionId
-                                 where eq.ExamId == attempt.ExamId
+                                 where eq.ExamId == attempt.ExamId // Sử dụng ExamId từ attempt đã tải
                                  select new
                                  {
                                      Content = o.Content,
                                      QuestionId = q.QuestionId,
                                      OptionId = o.OptionId,
-                                     IsCorrect = o.IsCorrect,
+                                     IsCorrect = o.IsCorrect ?? false, // Đảm bảo xử lý null cho bool
                                      Question = q.Content
                                  }).ToList()
                                  .GroupBy(q => q.QuestionId)
@@ -219,40 +251,52 @@ namespace Services
                                      {
                                          OptionId = o.OptionId,
                                          Content = o.Content,
-                                         IsCorrect = o.IsCorrect ?? false
+                                         IsCorrect = o.IsCorrect
                                      }).ToList()
                                  })
                                  .ToList();
+
                 result.numberQuestion = questions.Count;
                 Dictionary<string, List<AnswerResult>> keyValueOption = new Dictionary<string, List<AnswerResult>>();
-                List<AnswerResult> answerResults = new List<AnswerResult>();
+                List<AnswerResult> answerResults; // Khai báo ngoài vòng lặp
+
                 foreach (var question in questions)
                 {
-                    answerResults = new List<AnswerResult>();
+                    answerResults = new List<AnswerResult>(); // Khởi tạo mỗi lần lặp
                     var userAnswer = attempt.Answers.Where(a => a.QuestionId == question.QuestionId).ToList();
+
                     foreach (var option in question.Answers)
                     {
                         AnswerResult answerResult = new AnswerResult();
                         answerResult.OptionContent = option.Content;
-                        answerResult.IsCorrect = option.IsCorrect;
+                        answerResult.IsCorrect = option.IsCorrect; // Đã xử lý IsCorrect??false ở trên
+
                         var statusOption = userAnswer.FirstOrDefault(u => u.OptionId == option.OptionId);
-                        if (statusOption != null)
-                            answerResult.UserAnswer = true;
-                        else
-                            answerResult.UserAnswer = false;
+                        answerResult.UserAnswer = (statusOption != null); // Đơn giản hóa kiểm tra này
                         answerResults.Add(answerResult);
                     }
-                    var checkPoint = answerResults.Where(a => (a.UserAnswer == false && a.IsCorrect == true) || (a.UserAnswer == true && a.IsCorrect == false));
-                    if (!checkPoint.Any()) { result.numberCorrect++; }
+
+                    var correctOptionsForQuestion = question.Answers.Where(a => a.IsCorrect).Select(a => a.OptionId).OrderBy(id => id).ToList();
+                    var userSelectedOptionsForQuestion = answerResults.Where(ar => ar.UserAnswer).Select(ar => ar.OptionId).OrderBy(id => id).ToList(); // Lấy OptionId từ AnswerResult của người dùng
+
+                    // So sánh các đáp án đúng và đáp án người dùng đã chọn
+                    bool isCorrectlyAnswered = correctOptionsForQuestion.SequenceEqual(userSelectedOptionsForQuestion);
+
+                    if (isCorrectlyAnswered)
+                    {
+                        result.numberCorrect++;
+                    }
+
                     keyValueOption.Add(question.Question, answerResults);
                 }
                 result.optionResult = keyValueOption;
             }
             catch (Exception ex)
             {
-                return ex.Message;
+                Console.WriteLine($"TestService.GetResultTest ERROR: {ex.Message}\nStack Trace: {ex.StackTrace}");
+                return $"Lỗi khi lấy kết quả bài làm: {ex.Message}";
             }
-            return "";
+            return ""; // Trả về chuỗi rỗng nếu thành công
         }
 
         public string GetResultTestGuest(string attemptID, out ExamAttempt result)
@@ -269,5 +313,9 @@ namespace Services
             }
             return "";
         }
+
+
     }
+
+
 }

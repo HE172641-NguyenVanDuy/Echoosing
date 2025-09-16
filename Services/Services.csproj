@@ -8,8 +8,9 @@
 
   <ItemGroup>
     <PackageReference Include="DinkToPdf" Version="1.0.8" />
-    <PackageReference Include="EPPlus" Version="8.0.7" />
+    <PackageReference Include="EPPlus" Version="7.6.0" />
     <PackageReference Include="MailKit" Version="4.13.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Abstractions" Version="2.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
   </ItemGroup>
 

@@ -9,7 +9,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BusinessObjects", "Business
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Repositories", "DataAccessObjects\Repositories.csproj", "{CB66626D-2054-414F-BCBC-B3DBC8046771}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Services", "Services\Services.csproj", "{E3FB17D3-7CF0-48CC-BC1B-6B87BA8E0823}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Services", "Services\Services.csproj", "{E3FB17D3-7CF0-48CC-BC1B-6B87BA8E0823}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Resources", "Resources", "{5BAC4461-D968-4B65-8849-5C8D9EC0FB7A}"
+	ProjectSection(SolutionItems) = preProject
+		EmailExam.html = EmailExam.html
+		EmailOTP.html = EmailOTP.html
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
